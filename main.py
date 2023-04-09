@@ -100,7 +100,7 @@ async def embed(ctx, name, author, nail, message):
     await ctx.send(embed=embed1)
 
 async def play_music(ctx):
-    await asyncio.sleep(0.5)
+    await asyncio.sleep(1)
     if len(playlist) > 0 and not bot.voice_clients[0].is_playing():
         URL = playlist.pop()
         titles.pop()
@@ -116,13 +116,13 @@ async def play_music(ctx):
 @bot.command()
 async def play(ctx, *name):
     if len(name) ==0:
-        return await ctx.send("Invalis command: Pleave enter the title of music after \"!play \"")
+        return await ctx.send("Invalid command: Pleave enter the title of music after \"!play \"")
 
     query = " ".join(name)
     url = get_video_link(query)
     with yt_dlp.YoutubeDL(ydl_opts) as ydl:
         info = ydl.extract_info(url, download=False)
-        URL = info['formats'][9]['url']
+        URL = info['formats'][6]['url']
         title=info["title"]
         author=info["channel"]
         nail=info["thumbnail"]
@@ -145,11 +145,12 @@ async def play(ctx, *name):
         if ctx.author.voice:
             channel = ctx.author.voice.channel
             await channel.connect()
+            #If PlayList exists
             if len(playlist)>1:
                 await embed(ctx,title,author,nail,"Added to PlayList")
                 await show(ctx)
                 return await play_music(ctx)
-            
+            await asyncio.sleep(1)
             await embed(ctx,title,author,nail,"Now Playing")
             return await play_music(ctx)
             
@@ -196,7 +197,7 @@ async def clear(ctx):
 
 #---------------------------------------------------------------------------
 # Helper function
-api_key = "youtuve api key"
+api_key = "Youtube API key"
 youtube = build('youtube', 'v3', developerKey=api_key)
 
 def get_video_link(video_name):
@@ -220,4 +221,4 @@ def get_video_link(video_name):
     
 
  
-bot.run('Discord key')
+bot.run('Discord API key')
