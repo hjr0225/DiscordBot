@@ -49,6 +49,7 @@ async def help(ctx):
     emb.add_field(name="ping", value="Will reply \"Pong!\". For latency check")
     emb.add_field(name="map", value="Randomly select valorant map", inline=False)
     emb.add_field(name="play", value="Add music on the PlayList and play it.\nIf music is already playing add it on the PlayList\nIf PlayList exist, add on the PlayList and play the first one on the list", inline=False)
+    emb.add_field(name="pplay", value="Same as 'play' but plays with lower audio quality. Will play most of the songs on youutbe", inline=False)
     emb.add_field(name="show", value="Display PlayList", inline=False)
     emb.add_field(name="clear", value="Clear PlayList", inline=False)
     emb.add_field(name="skip", value="Skip to the next song in the list", inline=False)
@@ -114,6 +115,54 @@ async def play_music(ctx):
 
 #Join the voice channel and play music
 @bot.command()
+async def pplay(ctx, *name):
+    if len(name) ==0:
+        return await ctx.send("Invalid command: Pleave enter the title of music after \"!pplay \"")
+
+    query = " ".join(name)
+    url = get_video_link(query)
+    with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+        info = ydl.extract_info(url, download=False)
+        URL = info['formats'][4]['url']
+        title=info["title"]
+        author=info["channel"]
+        nail=info["thumbnail"]
+        titles.insert(0,title)
+        playlist.insert(0,URL)
+
+
+    #when bot is in the channel
+    try:
+        #when music is playing or paused
+        if bot.voice_clients[0].is_playing() or bot.voice_clients[0].is_paused():
+            return await embed(ctx,title,author,nail,"Added to PlayList")
+        
+        else:
+            await embed(ctx,title,author,nail,"Now Playing")
+            return await play_music(ctx)
+            
+    #when bot is not in the channel     
+    except:
+        if ctx.author.voice:
+            channel = ctx.author.voice.channel
+            await channel.connect()
+            #If PlayList exists
+            if len(playlist)>1:
+                await embed(ctx,title,author,nail,"Added to PlayList")
+                await show(ctx)
+                return await play_music(ctx)
+            await asyncio.sleep(1)
+            await embed(ctx,title,author,nail,"Now Playing")
+            return await play_music(ctx)
+            
+        #when the author is not in the channel  
+        else: 
+            playlist.clear()
+            titles.clear()
+            return await ctx.send("Please join voice Channel")
+
+#Join the voice channel and play music
+@bot.command()
 async def play(ctx, *name):
     if len(name) ==0:
         return await ctx.send("Invalid command: Pleave enter the title of music after \"!play \"")
@@ -122,7 +171,7 @@ async def play(ctx, *name):
     url = get_video_link(query)
     with yt_dlp.YoutubeDL(ydl_opts) as ydl:
         info = ydl.extract_info(url, download=False)
-        URL = info['formats'][6]['url']
+        URL = info['formats'][9]['url']
         title=info["title"]
         author=info["channel"]
         nail=info["thumbnail"]
@@ -197,7 +246,7 @@ async def clear(ctx):
 
 #---------------------------------------------------------------------------
 # Helper function
-api_key = "Youtube API key"
+api_key = "your_api_key"
 youtube = build('youtube', 'v3', developerKey=api_key)
 
 def get_video_link(video_name):
@@ -221,4 +270,4 @@ def get_video_link(video_name):
     
 
  
-bot.run('Discord API key')
+bot.run('bot_key')
