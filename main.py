@@ -2,43 +2,36 @@ import discord
 from discord.ext import commands, tasks
 from itertools import cycle
 import yt_dlp
-import random
 import asyncio
-import queue
+from collections import deque
 from googleapiclient.discovery import build
 
 
-intents = discord.Intents.default()
-intents.message_content = True
-
-status=cycle(["Sleeping", "At Virginia Tech", "Attending class", "New Jeans","Eating", "Doing Homework", "VS Code", ])
-youtube = build('youtube', 'v3', developerKey="your_api_key")
-playlist=queue.Queue()
-titles=queue.Queue()
+status=cycle(["IZ*ONE", "NewJeans", "IVE", "fromis_9","aespa", "LE SSERAFIM", "STAYC", ])
+youtube = build('youtube', 'v3', developerKey="Youtube-API-Key")
+playlist=deque()
+titles=deque()
 channel=[]
 videoCount=[]
 cTitle=[]
 dChannel=None
 
 
-#-----------------------------------------------------------------------------
-#Basic command
-
-bot = commands.Bot(command_prefix='!', intents=intents)
-bot.remove_command("help")
+bot = commands.Bot(command_prefix='!', intents=discord.Intents.all())
 
 @bot.event
 async def on_ready():
     print(f'Logged in as {bot.user} (ID: {bot.user.id})')
     print('------')
+    await bot.tree.sync()
     change_status.start()
     track_channel.start()
 
 @tasks.loop(seconds=3600)
 async def change_status():
-    await bot.change_presence(activity=discord.Game(next(status)))
+    await bot.change_presence(activity=discord.Activity(type =discord.ActivityType.listening, name=next(status)))
 
-@tasks.loop(seconds=300)
+@tasks.loop(seconds=600)
 async def track_channel():
     if len(channel) == 0:
         return
@@ -51,233 +44,153 @@ async def track_channel():
         video_count = search_response['items'][0]['statistics']['videoCount']
 
         if video_count > videoCount[i]:
-             videoCount[i]=video_count
-             search_response2 = youtube.search().list(
+            videoCount[i]=video_count
+            search_response2 = youtube.search().list(
                 channelId=channel[i],
                 type='video',
                 part='id',
                 order='date',
                 maxResults=1
             ).execute()
-             video_id = search_response2['items'][0]['id']['videoId']
-             await dChannel.send(f"https://www.youtube.com/watch?v={video_id}")
+            video_id = search_response2['items'][0]['id']['videoId']
+            await dChannel.send(f"https://www.youtube.com/watch?v={video_id}")
 
 
-@bot.command()
-async def ping(ctx):
-    await ctx.send("pong!")
+
+@bot.tree.command(name = "ping", description="Will reply \"Pong!\". For latency check")
+async def ping(interaction: discord.Interaction):
+    await interaction.response.send_message("pong!")
 
 @bot.event
-async def on_command_error(ctx, err):
-    if isinstance(err, commands.CommandNotFound):
-        await ctx.send("Invalid Command Input")
-
-@bot.command()
-async def map(ctx):
-    maps=("Haven","Split","Ascent", "Icebox", "Fracture", "Pearl", "Lotus")
-    await ctx.send(maps[random.randrange(0,len(maps))])
-@bot.command()
-async def help(ctx):
-    emb=discord.Embed(title="List of Commands", colour=discord.Colour.random())
-    emb.add_field(name="ping", value="Will reply \"Pong!\". For latency check")
-    emb.add_field(name="map", value="Randomly select valorant map", inline=False)
-    emb.add_field(name="play", value="Add music on the PlayList and play it.\nIf music is already playing add it on the PlayList\nIf PlayList exist, add on the PlayList and play the first one on the list", inline=False)
-    emb.add_field(name="pplay", value="Same as 'play' but plays with lower audio quality. Will play most of the songs on youutbe", inline=False)
-    emb.add_field(name="show", value="Display PlayList", inline=False)
-    emb.add_field(name="clear", value="Clear PlayList", inline=False)
-    emb.add_field(name="skip", value="Skip to the next song in the list", inline=False)
-    emb.add_field(name="stop", value="Stop playing and exit the voice channel", inline=False)
-    emb.add_field(name="pasue", value="Pause music", inline=False)
-    emb.add_field(name="resume", value="Resume music", inline=False)
-    emb.add_field(name="track", value="Keeps track of Youtube channel and notify when new video is uploaded", inline=False)
-    emb.add_field(name="delete", value="Delete the given channel from the tracking list", inline=False)
-    emb.add_field(name="tracking", value="Display list of Youtube Channels being tracked", inline=False)
-
-    await ctx.send(embed=emb)
-
-#--------------------------------------------------------------------------------
-#Music portion
+async def on_command_error(interaction: discord.Interaction, err):
+        await interaction.channel.send(f"An error occurred: {err}")
 
 ydl_opts = {
-        'format': 'bestaudio/best',
+        'format': 'm4a/bestaudio/best',
         'extractaudio': True,
-        'audioformat': 'mp3',
-        'outtmpl': '%(extractor)s-%(id)s-%(title)s.%(ext)s',
-        'restrictfilenames': True,
-        'noplaylist': True,
-        'nocheckcertificate': True,
-        'ignoreerrors': False,
-        'logtostderr': False,
         'quiet': True,
-        'no_warnings': True,
-        'default_search': 'ytsearch',
-        'source_address': '0.0.0.0',
+        'source_address': '0.0.0.0'
     }
 
 FFMPEG_OPTIONS = {'before_options': '-reconnect 1 -reconnect_streamed 1 -reconnect_delay_max 5', 'options': '-vn'}
 
-#Stops the music and leave the voice channel
-@bot.command()
-async def stop(ctx):
-    await ctx.voice_client.disconnect()
+async def play_music(interaction):
+    await asyncio.sleep(1)
+    if len(playlist) != 0 and not bot.voice_clients[0].is_playing():
+        URL = playlist.popleft()
+        titles.popleft()
+        bot.voice_clients[0].play(discord.FFmpegPCMAudio(URL, **FFMPEG_OPTIONS), after=lambda e: asyncio.run_coroutine_threadsafe(play_music(interaction), bot.loop))
+    
+    else:
+        await asyncio.sleep(300)
+        
+        if not bot.voice_clients[0].is_playing() and not bot.voice_clients[0].is_paused():
+            await interaction.channel.send("Left voice channel due to inactivity")
+            await bot.voice_clients[0].disconnect()
 
 
-async def embed(ctx, name, author, nail, message):
+
+#Join the voice channel and play music
+@bot.tree.command(name = "play", description="Play music, Add to the playlist")
+async def play(interaction: discord.Interaction, title:str):
+    await interaction.response.defer(thinking = True)
+
+    url = get_video_link(title)
+    with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+        info = ydl.extract_info(url, download=False)
+        
+        URL = info['url']
+        title=info["title"]
+        author=info["channel"]
+        nail=info["thumbnail"]
+        titles.append(title)
+        playlist.append(URL)
+
+    try:
+        #when music is playing or paused
+        voice = bot.voice_clients[0]
+        if voice.is_playing() or voice.is_paused():
+            return await embed(interaction,title,"Added to PlayList",nail,author)
+        
+        else:
+            await embed(interaction,title,"Now Playing",nail,author)
+            return await play_music(interaction)
+    except:
+
+        if interaction.user.voice is not None:
+            await interaction.user.voice.channel.connect()
+            await embed(interaction,title,"Now Playing",nail,author)
+            return await play_music(interaction)
+            
+        #when the author is not in the channel  
+        else: 
+            playlist.clear()
+            titles.clear()
+            return await interaction.followup.send("Please join voice Channel")
+
+
+@bot.tree.command(name = "show", description="Display PlayList")
+async def show(interaction: discord.Interaction):
+    query = "\n".join(titles)
+    
+    await interaction.response.send_message(embed=discord.Embed(colour=discord.Colour.random(),description=query+"",title=" Play List "))
+
+@bot.tree.command(name = "stop", description="Stop playing, clear PlayList and exit the voice channel")
+async def stop(interaction: discord.Interaction):
+    playlist.clear()
+    titles.clear()
+    await interaction.response.send_message("Exiting voice channel, PlayList is cleared")
+    await bot.voice_clients[0].disconnect()
+
+@bot.tree.command(name = "skip", description="Skip music")
+async def skip(interaction: discord.Interaction):
+    await interaction.response.send_message("Skipping...")
+    interaction.client.voice_clients[0].stop()
+
+@bot.tree.command(name = "pause", description="Pause music")
+async def pause(interaction: discord.Interaction):
+    if not bot.voice_clients[0].is_paused():
+        await interaction.response.send_message("Paused")
+        bot.voice_clients[0].pause()
+    else:
+        await interaction.response.send_message("Already paused")
+
+@bot.tree.command(name = "resume", description="Resume music")
+async def resume(interaction: discord.Interaction):
+    if bot.voice_clients[0].is_paused():
+        await interaction.response.send_message("Resuming...")
+        bot.voice_clients[0].resume()
+    else:
+        await interaction.response.send_message("Already playing")
+
+@bot.tree.command(name = "remove", description="Remove a song from PlayList from latest")
+async def remove(interaction: discord.Interaction):
+    if (len(playlist) + len(titles)) == 0:
+        await interaction.response.send_message("PlayList is empty")
+    else:
+        playlist.pop()
+        await interaction.response.send_message(f"{titles.pop()} has been removed from the PlayList")
+
+@bot.tree.command(name = "clear", description="Clear PlayList")
+async def clear(interaction: discord.Interaction):
+    playlist.clear()
+    titles.clear()
+    await interaction.response.send_message("PlayList cleared")
+
+async def embed(interaction, name, author, nail, message):
     embed1=discord.Embed(colour=discord.Colour.random(),description=message,title=name)
     embed1.set_author(name=author)
     embed1.set_thumbnail(url=nail)
 
-    await ctx.send(embed=embed1)
-
-async def play_music(ctx):
-    await asyncio.sleep(1)
-    if not playlist.empty() and not bot.voice_clients[0].is_playing():
-        URL = playlist.get()
-        titles.get()
-        voice = bot.voice_clients[0]
-        await voice.play(discord.FFmpegPCMAudio(URL, **FFMPEG_OPTIONS), after=lambda e: asyncio.run_coroutine_threadsafe(play_music(ctx), bot.loop))
-    else:
-        await asyncio.sleep(300)
-        if not bot.voice_clients[0].is_playing() and not bot.voice_clients[0].is_paused():
-            await ctx.send("Left voice channel due to inactivity")
-            await ctx.voice_client.disconnect()
-
-#Join the voice channel and play music
-@bot.command()
-async def pplay(ctx, *name):
-    if len(name) ==0:
-        return await ctx.send("Invalid command: Please enter the title of music after \"!pplay \"")
-
-    query = " ".join(name)
-    url = get_video_link(query)
-    with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-        info = ydl.extract_info(url, download=False)
-        URL = info['formats'][4]['url']
-        title=info["title"]
-        author=info["channel"]
-        nail=info["thumbnail"]
-        titles.put(title)
-        playlist.put(URL)
+    await interaction.followup.send(embed=embed1)
 
 
-    #when bot is in the channel
-    try:
-        #when music is playing or paused
-        if bot.voice_clients[0].is_playing() or bot.voice_clients[0].is_paused():
-            return await embed(ctx,title,"Added to PlayList",nail,author)
-        
-        else:
-            await embed(ctx,title,"Now Playing",nail,author)
-            return await play_music(ctx)
-            
-    #when bot is not in the channel     
-    except:
-        if ctx.author.voice:
-            channel = ctx.author.voice.channel
-            await channel.connect()
-            #If PlayList exists
-            if playlist.empty():
-                await embed(ctx,title,"Added to PlayList",nail,author)
-                await show(ctx)
-                return await play_music(ctx)
-            await asyncio.sleep(1)
-            await embed(ctx,title,"Now Playing",nail,author)
-            return await play_music(ctx)
-            
-        #when the author is not in the channel  
-        else: 
-            playlist.queue.clear()
-            titles.qeueue.clear()
-            return await ctx.send("Please join voice Channel")
+@bot.tree.command(name = "track", description="Tracks YouTube channel. Notify when new video is uploaded")
+async def track(interaction: discord.Interaction, name:str):
+    await interaction.response.defer(thinking = True)
 
-#Join the voice channel and play music
-@bot.command()
-async def play(ctx, *name):
-    if len(name) ==0:
-        return await ctx.send("Invalid command: Please enter the title of music after \"!play \"")
-
-    query = " ".join(name)
-    url = get_video_link(query)
-    with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-        info = ydl.extract_info(url, download=False)
-        URL = info['formats'][9]['url']
-        title=info["title"]
-        author=info["channel"]
-        nail=info["thumbnail"]
-        titles.put(title)
-        playlist.put(URL)
-
-
-    #when bot is in the channel
-    try:
-        #when music is playing or paused
-        if bot.voice_clients[0].is_playing() or bot.voice_clients[0].is_paused():
-            return await embed(ctx,title,"Added to PlayList",nail,author)
-        
-        else:
-            await embed(ctx,title,"Now Playing",nail,author)
-            return await play_music(ctx)
-            
-    #when bot is not in the channel     
-    except:
-        if ctx.author.voice:
-            channel = ctx.author.voice.channel
-            await channel.connect()
-            #If PlayList exists
-            if playlist.empty():
-                await embed(ctx,title,"Added to PlayList",nail,author)
-                await show(ctx)
-                return await play_music(ctx)
-            await asyncio.sleep(1)
-            await embed(ctx,title,"Now Playing",nail,author)
-            return await play_music(ctx)
-            
-        #when the author is not in the channel  
-        else: 
-            playlist.queue.clear()
-            titles.queue.clear()
-            return await ctx.send("Please join voice Channel")
-
-
-@bot.command()
-async def show(ctx):
-    query = "\n".join(titles.queue)
-    embed1=discord.Embed(colour=discord.Colour.random(),description=query+"",title=" Play List ")
-    
-    await ctx.send(embed=embed1)
-    
-@bot.command()
-async def skip(ctx):
-    ctx.voice_client.stop()
-
-@bot.command()
-async def pause(ctx):
-    if not bot.voice_clients[0].is_paused():
-        bot.voice_clients[0].pause()
-    else:
-         await ctx.send("Already paused")
-
-@bot.command()
-async def resume(ctx):
-    if bot.voice_clients[0].is_paused():
-        bot.voice_clients[0].resume()
-    else:
-        await ctx.send("Already playing")
-
-@bot.command()
-async def clear(ctx):
-    playlist.queue.clear()
-    titles.queue.clear()
-    await ctx.send("PlayList cleared")
-
-@bot.command()
-async def track(ctx, *cName):
-    if len(cName) ==0:
-        return await ctx.send("Invalid command: Please enter the channel name after \"!track \"")
-
-    query = " ".join(cName)
     search_response = youtube.search().list(
-            q=query,
+            q=name,
             type='channel',
             part='id',
             maxResults=1
@@ -294,25 +207,19 @@ async def track(ctx, *cName):
 
     channel.append(channel_id)
     videoCount.append(video_count)
-    global dChannel
-    dChannel = ctx.channel
 
     name = search_response2['items'][0]['snippet']['title']
     custom = search_response2['items'][0]['snippet']['customUrl']
     tumbnail = search_response2['items'][0]['snippet']['thumbnails']['medium']['url']
     description = search_response2['items'][0]['snippet']['description']
     cTitle.append(name + "("+custom+")")
-    return await embed(ctx, name + "("+custom+")", "Now tracking", tumbnail, description)
+    return await embed(interaction, name + "("+custom+")", "Now tracking", tumbnail, description)
 
-@bot.command()
-async def delete(ctx, *cName):
-    if len(cName) ==0:
-        return await ctx.send("Invalid command: Please enter the channel name after \"!delete \"")
-    
-    query = " ".join(cName)
+@bot.tree.command(name = "delete", description="Delete YouTube channel from tracking list")
+async def delete(interaction: discord.Interaction, name:str):  
 
     search_response = youtube.search().list(
-            q=query,
+            q=name,
             type='channel',
             part='id',
             maxResults=1
@@ -321,20 +228,24 @@ async def delete(ctx, *cName):
     channel_id = search_response['items'][0]['id']['channelId']
 
     if channel.count(channel_id) == 0:
-        return await ctx.send(f"Channel: {query} is not being tracked")
+        return await interaction.response.send_message(f"Channel: {name} is not being tracked")
     else:
         i = channel.index(channel_id)
         channel.pop(i)
         videoCount.pop(i)
-        return await ctx.send(f"Channel: {cTitle.pop(i)} is no longer being tracked")
+        return await interaction.response.send_message(f"Channel: {cTitle.pop(i)} is no longer being tracked")
     
-@bot.command()
-async def tracking(ctx):
+@bot.tree.command(name = "tracking", description="Display tracking list")
+async def tracking(interaction: discord.Interaction):
     query = "\n".join(cTitle)
-    embed1=discord.Embed(colour=discord.Colour.random(),description=query+"",title=" Tracking List ")
     
-    await ctx.send(embed=embed1)
+    await interaction.response.send_message(embed=discord.Embed(colour=discord.Colour.random(),description=query+"",title=" Tracking List "))
 
+@bot.tree.command(name = "set", description="Fix a channel where tracking notifications appear")
+async def set(interaction: discord.Interaction):
+    await interaction.response.send_message("Tracking channel fixed")
+    global dChannel
+    dChannel = interaction.channel
 
 #---------------------------------------------------------------------------
 # Helper function
@@ -355,4 +266,4 @@ def get_video_link(video_name):
     
 
  
-bot.run('bot_key')
+bot.run('Discord-Toket')
