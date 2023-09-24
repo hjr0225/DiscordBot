@@ -75,10 +75,11 @@ ydl_opts = {
 FFMPEG_OPTIONS = {'before_options': '-reconnect 1 -reconnect_streamed 1 -reconnect_delay_max 5', 'options': '-vn'}
 
 async def play_music(interaction):
-    await asyncio.sleep(1)
     if len(playlist) != 0 and not bot.voice_clients[0].is_playing():
         URL = playlist.popleft()[0]
-        bot.voice_clients[0].play(discord.FFmpegPCMAudio(URL, **FFMPEG_OPTIONS), after=lambda e: asyncio.run_coroutine_threadsafe(play_music(interaction), bot.loop))
+        seed = discord.FFmpegPCMAudio(URL, **FFMPEG_OPTIONS)
+        await asyncio.sleep(1.5)
+        bot.voice_clients[0].play(seed, after=lambda e: asyncio.run_coroutine_threadsafe(play_music(interaction), bot.loop))
     
     else:
         await asyncio.sleep(300)
