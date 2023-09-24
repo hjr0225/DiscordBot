@@ -33,17 +33,17 @@ async def change_status():
 async def track_channel():
     if not channels:
         return
-    for channel in channels.items():
+    for ID, channel in channels.items():
         search_response = youtube.channels().list(
-            id=channel[0],
+            id=ID,
             part = 'statistics',
             maxResults=1
         ).execute()
         video_count = search_response['items'][0]['statistics']['videoCount']
 
-        if video_count > channel[2]:
+        if video_count > channel[0]:
             search_response2 = youtube.search().list(
-                channelId=channel[0],
+                channelId=ID,
                 type='video',
                 part='id',
                 order='date',
@@ -52,7 +52,7 @@ async def track_channel():
             video_id = search_response2['items'][0]['id']['videoId']
             await dChannel.send(f"https://www.youtube.com/watch?v={video_id}")
         
-        channel[2]=video_count
+        channels[ID][0] = video_count
         
 
 
